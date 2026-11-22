@@ -1,5 +1,7 @@
 # OpenSWOS on Miyoo Mini
 
+![OpenSWOS_001.png](screenshots/OpenSWOS_001.png)
+
 ## Build
 
 Put the OpenSWOS Git checkout in the shared workspace of the
