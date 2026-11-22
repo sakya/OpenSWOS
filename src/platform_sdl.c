@@ -1002,12 +1002,21 @@ int Platform_Init(const PlatformInitOptions *opts)
     }
 
     s_renderer = SDL_CreateRenderer(s_window, -1, rflags);
+#ifdef SWOS_MIYOO_BUILD
+    if (!s_renderer && (rflags & SDL_RENDERER_PRESENTVSYNC)) {
+        fprintf(stderr, "[render] hardware VSync unavailable (%s); retrying without VSync\n",
+                SDL_GetError());
+        rflags &= ~SDL_RENDERER_PRESENTVSYNC;
+        s_renderer = SDL_CreateRenderer(s_window, -1, rflags);
+        s_vsync_enabled = 0;
+    }
+#endif
     if (!s_renderer) {
         /* Fall back to software if the requested mode failed. */
         fprintf(stderr,
             "SDL_CreateRenderer (%s%s) failed: %s — falling back to software\n",
             renderer_mode == PLATFORM_RENDERER_ACCEL ? "accel" : "software",
-            (renderer_mode == PLATFORM_RENDERER_ACCEL && vsync) ? "+vsync" : "",
+            (rflags & SDL_RENDERER_PRESENTVSYNC) ? "+vsync" : "",
             SDL_GetError());
         s_renderer = SDL_CreateRenderer(s_window, -1, SDL_RENDERER_SOFTWARE);
         s_renderer_is_hw = 0;
@@ -1056,14 +1065,15 @@ int Platform_Init(const PlatformInitOptions *opts)
             fprintf(stderr, "[render] driver=gpu (sokol) vsync: requested=%s actual=%s\n",
                     vsync ? "on" : "off", s_vsync_enabled ? "on" : "off");
         if (!s_gpu && SDL_GetRendererInfo(s_renderer, &info) == 0) {
-            int got_vsync = (info.flags & SDL_RENDERER_PRESENTVSYNC) ? 1 : 0;
+            /* The software renderer can advertise VSync without providing it. */
+            int got_vsync = s_renderer_is_hw && (info.flags & SDL_RENDERER_PRESENTVSYNC);
             /* Pass 1 renders into a texture. The software renderer and a few
              * exotic backends can't, so ask before relying on it rather than
              * failing per-frame. */
             s_scale_targets_ok = (info.flags & SDL_RENDERER_TARGETTEXTURE) ? 1 : 0;
             fprintf(stderr, "[render] driver=%s flags=0x%x hw=%d vsync: requested=%s actual=%s\n",
                     info.name ? info.name : "?", info.flags, s_renderer_is_hw,
-                    s_vsync_enabled ? "on" : "off",
+                    vsync ? "on" : "off",
                     got_vsync ? "on" : "off");
             /* Only BELIEVE the flag on a hardware renderer. The software
              * renderer reports PRESENTVSYNC (flags 0xd) while doing nothing of
