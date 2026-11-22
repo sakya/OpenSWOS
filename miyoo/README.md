@@ -41,3 +41,6 @@ including them in the ZIP. The packer archives everything already under
 
 Launch **OpenSWOS** from **Apps** in OnionOS. For startup errors, check
 `App/OpenSWOS/launch.log` and `App/OpenSWOS/conf/.swos/SWOS.log`.
+
+Use **L2** for Escape, **Select + Start** to quit OpenSWOS, and
+**Menu + Power** for OnionOS screenshots.

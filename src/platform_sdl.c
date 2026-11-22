@@ -2197,10 +2197,47 @@ static void touch_event(const SDL_Event *e)
 }
 #endif
 
+#ifdef SWOS_MIYOO_BUILD
+/* The Mini's built-in buttons arrive as SDL keyboard events. */
+static int miyoo_map_key_event(SDL_Event *ev)
+{
+    static int select_down, start_down;
+    if (ev->type == SDL_WINDOWEVENT && ev->window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+        select_down = start_down = 0;
+    if (ev->type != SDL_KEYDOWN && ev->type != SDL_KEYUP)
+        return 0;
+
+    switch (ev->key.keysym.sym) {
+    case SDLK_ESCAPE:                 /* Menu belongs to OnionOS shortcuts. */
+        return 1;
+    case SDLK_TAB:                    /* L2: send Escape through the usual game path. */
+        ev->key.keysym.sym = SDLK_ESCAPE;
+        ev->key.keysym.scancode = SDL_SCANCODE_ESCAPE;
+        return 0;
+    case SDLK_RCTRL:                  /* Select */
+        select_down = ev->type == SDL_KEYDOWN;
+        break;
+    case SDLK_RETURN:                 /* Start */
+        start_down = ev->type == SDL_KEYDOWN;
+        break;
+    default:
+        return 0;
+    }
+
+    if (select_down && start_down && ev->type == SDL_KEYDOWN && !ev->key.repeat)
+        ev->type = SDL_QUIT;
+    return 0;
+}
+#endif
+
 static void pump_events_any_thread(void)
 {
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
+#ifdef SWOS_MIYOO_BUILD
+        if (miyoo_map_key_event(&ev))
+            continue;
+#endif
         if ((ev.type == SDL_KEYDOWN && !ev.key.repeat) || ev.type == SDL_MOUSEBUTTONDOWN ||
             ev.type == SDL_CONTROLLERBUTTONDOWN || ev.type == SDL_JOYBUTTONDOWN || ev.type == SDL_FINGERDOWN)
             s_press_count++;            /* (Platform_PressCount: what skips a cutscene) */
