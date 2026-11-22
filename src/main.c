@@ -405,6 +405,9 @@ int Video_WideWidth(int dw, int dh, int *aspect)
     if (w > dw) w = dw & ~1;
     if (w < SCREEN_WIDTH)          w = SCREEN_WIDTH;
     if (w > PITCH_VIEW_MAX_WIDTH)  w = PITCH_VIEW_MAX_WIDTH;
+#ifdef SWOS_MIYOO_BUILD
+    if (w > PLATFORM_MIYOO_MAX_WIDTH) w = PLATFORM_MIYOO_MAX_WIDTH;
+#endif
     return w;
 }
 

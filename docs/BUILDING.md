@@ -15,6 +15,7 @@ target architecture. Pass an arch flag for cross builds.
 | Linux x86_64 (64-bit)                  | `make X86_64=1`        | `bin/SWOS.x86_64`     |
 | Linux ARM64 (aarch64) — Pi 4/5 etc.    | `make ARM64=1`         | `bin/SWOS.aarch64`    |
 | Linux ARM32 (armhf, armv7-a + NEON)    | `make ARM=1`           | `bin/SWOS.armhf`      |
+| Miyoo Mini (Onion)                    | `make ARM=1 MIYOO_SDL2=…` | `bin/SWOS.miyoo`   |
 | Windows                                | `make` on MSYS2/Cygwin | `bin/SWOS.exe`        |
 | macOS (native, single-arch)            | `make`                 | `bin/SWOS.macos`      |
 | macOS universal binary (x86_64 + arm64)| `make macos-universal` | `bin/SWOS.macos`      |
@@ -124,6 +125,23 @@ make ARM=1
 Compiles for `armv7-a` with NEON (covers Pi 2 / 3 / 4 / 5 in 32-bit
 mode). armhf is already ILP32 so no `-m32`. Override the toolchain
 prefix with `make ARM=1 CC=...` if your distro uses a different one.
+
+### Miyoo Mini (Onion)
+
+Use the [Union toolchain container](https://github.com/shauninman/union-miyoomini-toolchain)
+with OpenSWOS in its workspace. The local `miyoo/build-sdl2.sh` comes from
+[OpenKrynn](https://git.piblog.org/sakya/OpenKrynn/raw/branch/main/miyoo/build-sdl2.sh).
+With its prerequisites installed, run from the OpenSWOS directory:
+
+```sh
+sh miyoo/build-sdl2.sh
+make ARM=1 MIYOO_SDL2=miyoo CC="${CROSS_COMPILE}gcc" NETPLAY=0 SHADERCC=0
+```
+
+Keep the OpenSWOS `bin/` data with `SWOS.miyoo`. Copy `libSDL2-2.0.so.0`,
+`libEGL.so`, and `libGLESv2.so` from `miyoo/lib/` into
+`bin/lib/miyoo/`. The firmware supplies the MI libraries. Use `renderer = sdl`
+in the `[video]` section of the OpenSWOS configuration to use SDL's Miyoo driver.
 
 ### Windows
 

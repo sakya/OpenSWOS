@@ -988,7 +988,7 @@ end_replay:
     _replayState = 0;
     return;
 
-after_decode:
+after_decode: ;  /* C11 requires a statement before the overlay declarations. */
     /* loc_10C4E2: overlay drawing */
 
     /* The overlay's coordinates are each release's own, against its own screen:

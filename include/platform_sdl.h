@@ -14,6 +14,11 @@
 #define PLATFORM_SCREEN_W 336
 #define PLATFORM_SCREEN_H 272
 
+#ifdef SWOS_MIYOO_BUILD
+/* The native SDL renderer accepts textures up to 640x480. */
+#define PLATFORM_MIYOO_MAX_WIDTH 640
+#endif
+
 /* ---- Lifecycle ----------------------------------------------------- */
 /* Renderer selection.
  *

@@ -1,0 +1,2 @@
+#!/bin/sh
+make ARM=1 MIYOO_SDL2=miyoo CC="${CROSS_COMPILE}gcc" NETPLAY=0 SHADERCC=0

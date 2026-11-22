@@ -132,6 +132,11 @@ TARGET_NAME := SWOS.aarch64
 BUILD_OS    := linux
 BUILD_ARCH  := arm64
 else ifdef ARM
+ifdef MIYOO_SDL2
+TARGET_NAME := SWOS.miyoo
+BUILD_OS    := linux
+BUILD_ARCH  := miyoo
+else
 # Distinguish the cross-built ARM binary so it doesn't overwrite a
 # native x86 bin/SWOS in the same checkout. Native ARM builds (on a
 # Pi) also get the .armhf suffix — `file bin/SWOS.armhf` confirms the
@@ -139,6 +144,7 @@ else ifdef ARM
 TARGET_NAME := SWOS.armhf
 BUILD_OS    := linux
 BUILD_ARCH  := armhf
+endif
 else ifdef X86_64
 # Linux x86_64 explicit build (drops the default -m32 so the binary
 # is 64-bit LP64 — matches what the macOS / aarch64 / cygwin64
@@ -275,6 +281,12 @@ ifdef WASM
 # for compile and link; no pkg-config.
 SDL2_CFLAGS := -sUSE_SDL=2
 SDL2_LIBS   := -sUSE_SDL=2
+else ifeq ($(BUILD_ARCH),miyoo)
+# Use the headers and versioned library produced by OpenKrynn's build-sdl2.sh.
+SDL2_CFLAGS := -I"$(MIYOO_SDL2)/include/SDL2" -D_REENTRANT -DSWOS_MIYOO_BUILD=1
+# The Miyoo firmware supplies the MI libraries SDL2 depends on.
+SDL2_LIBS   := -L"$(MIYOO_SDL2)/lib" -Wl,-rpath-link,"$(MIYOO_SDL2)/lib" \
+               -Wl,--allow-shlib-undefined -l:libSDL2-2.0.so.0 -lpthread
 else ifdef SDL2_MACOS_FW
 # macOS framework: header search via -F + Headers/, link via -framework SDL2.
 # The -rpath entries let the binary find SDL2.framework at runtime when
@@ -511,7 +523,8 @@ ifdef SWOS_SAVE_LEGACY_DISPATCH
 DEBUG_FLAGS += -DSWOS_SAVE_LEGACY_DISPATCH=1
 endif
 
-CFLAGS  := $(ARCHFLAGS) -O2 -g -std=gnu11 -fno-strict-aliasing -fno-builtin \
+# Assembler aliases in swos_globals.c need BSS symbols, not COMMON (the GCC < 10 default).
+CFLAGS  := $(ARCHFLAGS) -O2 -g -std=gnu11 -fno-strict-aliasing -fno-builtin -fno-common \
            -MMD -MP \
            -D_FILE_OFFSET_BITS=64 $(DEBUG_FLAGS) \
            -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable \

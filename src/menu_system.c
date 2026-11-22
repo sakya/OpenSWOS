@@ -1986,6 +1986,8 @@ void MenuProc(void)
     int16_t dir;
 
 #ifdef SWOS_SDL_BUILD
+    static int8_t s_navLog = -1;
+
     /* If Platform_RequestQuit flagged a quit from the SDL event pump,
      * longjmp back to FrontEndMainLoop now — short-circuits the entire
      * nested menu state machine so we don't flicker between submenus
@@ -2156,7 +2158,6 @@ no_event_or_done:
      * environment variables to set; a line is written only when a direction is
      * pressed. SWOS_MENU_NAV_LOG=0/1 overrides either way. Ordinals are the menu
      * JSON's item numbers. */
-    static int8_t s_navLog = -1;
     if (s_navLog < 0) {
         const char *v = getenv("SWOS_MENU_NAV_LOG");
 #ifdef SWOS_TEST_RULES      /* a tester build (include/test_rules.h) */

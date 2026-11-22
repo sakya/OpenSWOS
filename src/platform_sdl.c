@@ -138,7 +138,13 @@ static SDL_Renderer *s_renderer;
  * drawn from the SAME texture. See present_frame_copy: one upload, two draws.
  * Worst case the HUD covers the whole screen (the result/scoreboard overlay),
  * hence a full second screen's worth. */
+#ifdef SWOS_MIYOO_BUILD
+#define PLATFORM_TEX_W  PLATFORM_MIYOO_MAX_WIDTH
+#define PLATFORM_TEX_H  PLATFORM_SCREEN_H
+#else
+#define PLATFORM_TEX_W  PITCH_VIEW_MAX_WIDTH
 #define PLATFORM_TEX_H  (PLATFORM_SCREEN_H * 2)
+#endif
 static SDL_Texture  *s_textures[PLATFORM_TEX_RING];  /* RGBA8888 streaming, the widest picture x PLATFORM_TEX_H; used at _screen_width */
 static int           s_tex_idx;
 /* Cached-RAM staging buffer: ALL per-pixel work (8bpp→RGBA, overlay blend) happens
@@ -706,6 +712,11 @@ int Platform_Init(const PlatformInitOptions *opts)
     /* Phones: the whole screen, always (docs/MOBILE.md). */
     fs_mode = PLATFORM_FULLSCREEN_DESKTOP;
 #endif
+#ifdef SWOS_MIYOO_BUILD
+    /* The mini driver has no desktop bounds. Give it an explicit window below. */
+    win_scale = 1;
+    fs_mode = PLATFORM_FULLSCREEN_NONE;
+#endif
 #ifdef SWOS_WASM_BUILD
     /* Web: fullscreen is browser-managed (F11) — SDL desktop-fullscreen at boot
      * is user-gesture-gated and would stretch the canvas — so force windowed
@@ -737,7 +748,7 @@ int Platform_Init(const PlatformInitOptions *opts)
      * object-fit:contain) and pins the canvas to a small fixed size letterboxed in the
      * page. On the web the page CSS owns the canvas display size, so leave it off. */
     Uint32 wflags = SDL_WINDOW_SHOWN;
-#ifndef SWOS_WASM_BUILD
+#if !defined(SWOS_WASM_BUILD) && !defined(SWOS_MIYOO_BUILD)
     wflags |= SDL_WINDOW_RESIZABLE;
 #endif
 #ifdef SWOS_MOBILE_BUILD
@@ -823,10 +834,16 @@ int Platform_Init(const PlatformInitOptions *opts)
         }
 #endif
     }
+    int window_pos = SDL_WINDOWPOS_CENTERED_DISPLAY(screen);
+#ifdef SWOS_MIYOO_BUILD
+    window_pos = 0;
+    client_w = s_pinned_w = PLATFORM_MIYOO_MAX_WIDTH;
+    client_h = s_pinned_h = 480;
+    pinned = 1;
+#endif
     s_window = SDL_CreateWindow(
         s_title,
-        SDL_WINDOWPOS_CENTERED_DISPLAY(screen),
-        SDL_WINDOWPOS_CENTERED_DISPLAY(screen),
+        window_pos, window_pos,
         client_w, client_h,
         wflags);
     if (!s_window && gpu_wanted) {
@@ -835,8 +852,7 @@ int Platform_Init(const PlatformInitOptions *opts)
         fprintf(stderr, "[gpu] no OpenGL window (%s): SDL's renderer instead\n", SDL_GetError());
         gpu_wanted = 0;
         wflags &= ~GpuPresent_WindowFlags();
-        s_window = SDL_CreateWindow(s_title, SDL_WINDOWPOS_CENTERED_DISPLAY(screen),
-                                    SDL_WINDOWPOS_CENTERED_DISPLAY(screen), client_w, client_h, wflags);
+        s_window = SDL_CreateWindow(s_title, window_pos, window_pos, client_w, client_h, wflags);
     }
     if (!s_window) {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
@@ -1004,7 +1020,12 @@ int Platform_Init(const PlatformInitOptions *opts)
     }   /* (SDL's renderer) */
     Gfx_BindSdl(s_renderer, s_window);
 
+#ifdef SWOS_MIYOO_BUILD
+    /* Draw the HUD into the frame because the driver cannot fit its scratch strip. */
+    s_subpixel_scroll = 0;
+#else
     s_subpixel_scroll = opts ? opts->subpixel_scroll : 1;
+#endif
     s_scaling_smooth  = opts ? opts->scaling_smooth  : 1;
     if (opts)
         Platform_SetDisplayOptions(opts);   /* (launcher options, agent B: DISPLAY OPTIONS) */
@@ -1123,14 +1144,14 @@ int Platform_Init(const PlatformInitOptions *opts)
             s_renderer,
             SDL_PIXELFORMAT_ARGB8888,
             SDL_TEXTUREACCESS_STREAMING,
-            PITCH_VIEW_MAX_WIDTH, PLATFORM_TEX_H);
+            PLATFORM_TEX_W, PLATFORM_TEX_H);
         if (!s_textures[ti]) {
             fprintf(stderr, "SDL_CreateTexture[%d]: %s\n", ti, SDL_GetError());
             return -1;
         }
         (void)0;
     }
-    s_frame_rgba = (uint32_t *)SDL_malloc((size_t)PITCH_VIEW_MAX_WIDTH * PLATFORM_TEX_H * 4);
+    s_frame_rgba = (uint32_t *)SDL_malloc((size_t)PLATFORM_TEX_W * PLATFORM_TEX_H * 4);
     if (!s_frame_rgba) {
         fprintf(stderr, "frame buffer alloc failed (%d x %d)\n", _screen_width, PLATFORM_SCREEN_H);
         return -1;
@@ -2959,7 +2980,13 @@ static void render_frame_impl(int pump_full)
     {
         int stripRows = compose_hud_strip(fb, _screen_width);
         SDL_Rect up = { 0, 0, _screen_width, PLATFORM_SCREEN_H + stripRows };
-        SDL_UpdateTexture(tex, &up, fb, _screen_width * 4);
+        if (SDL_UpdateTexture(tex, &up, fb, _screen_width * 4) < 0) {
+            static int logged_upload_error;
+            if (!logged_upload_error) {
+                fprintf(stderr, "[render] SDL_UpdateTexture: %s\n", SDL_GetError());
+                logged_upload_error = 1;
+            }
+        }
     }
 
     if (s_stretch)
