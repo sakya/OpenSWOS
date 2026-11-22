@@ -252,6 +252,9 @@ static void kbd_arrow(SDL_Keycode k, int down)
 #define KBD_FIRE_LCTRL  0x2
 #define KBD_FIRE_RETURN 0x4
 #define KBD_FIRE_BOUND  0x8     /* the player's own fire key ([input] key_fire) */
+#ifdef SWOS_MIYOO_BUILD
+#define KBD_FIRE_SPACE  0x10    /* the Miyoo's A button */
+#endif
 static int s_kbd_fire_keys;
 
 /* ---- The player's own keys: [input] key_up / key_down / key_left / key_right / key_fire ----
@@ -1574,6 +1577,11 @@ void InputSDL_HandleEvent(const SDL_Event *e)
             break;
         }
         int a = sdl_to_amiga(e->key.keysym.sym);
+#ifdef SWOS_MIYOO_BUILD
+        /* A arrives as Space. Keep it out of the highlight-capture hotkey. */
+        if (a == AKEY_SPACE && !_gTextInputActive)
+            a = -1;
+#endif
         /* Arrow keys drive joy1Dat directly (s_kbd_up/down/left/right
          * below) so we DON'T also push their Amiga scancodes into
          * keyBuffer — `GetKey()` then `keycodeLut` maps the arrow
@@ -1649,6 +1657,9 @@ void InputSDL_HandleEvent(const SDL_Event *e)
         case SDLK_LCTRL:
             s_kbd_fire_keys |= KBD_FIRE_LCTRL;
             s_kbd_fire = 1;
+#ifdef SWOS_MIYOO_BUILD
+            s_kbd_skip = 1;       /* B also skips, as on a GameController. */
+#endif
             if (e->key.repeat == 0)
                 s_fire_event = 1;
             break;
@@ -1659,19 +1670,17 @@ void InputSDL_HandleEvent(const SDL_Event *e)
                 s_fire_event = 1;
             break;
         case SDLK_SPACE:
-            /* In a live match SPACE is SWOS's highlight-capture key
-             * (game_loop.c MainKeysCheck case 0x20 — sets
-             * fadeAndSaveHighlightScene, which fades the screen).
-             * Don't route it to fire/skip on the game pad in-match —
-             * that would mash the player's fire button at the same
-             * time as the highlight capture.
-             *
-             * Outside a match SPACE drives the season-end auto-skip
-             * latch (pauseSkipRequested) ONLY. Fire (Right Ctrl /
-             * Left Ctrl / Enter) is intentionally separate so SPACE
-             * stays usable as a literal space character in filename /
-             * tactics-name text input fields, which read shortFire
-             * via the same MenuCheckControls path the menus do.
+#ifdef SWOS_MIYOO_BUILD
+            if (!_gTextInputActive) {
+                s_kbd_fire_keys |= KBD_FIRE_SPACE;
+                s_kbd_fire = 1;
+                if (e->key.repeat == 0)
+                    s_fire_event = 1;
+            }
+#else
+            /* Space in the Amiga key buffer triggers highlight capture in a
+             * live match. Outside a match it drives the season-end skip latch.
+             * Keep fire separate while typing so Space can enter a literal space.
              *
              * gameState in [ST_STARTING_GAME .. ST_PENALTIES] means
              * a match is on screen — see game_types.h. EXCEPT: gameState
@@ -1686,6 +1695,7 @@ void InputSDL_HandleEvent(const SDL_Event *e)
                   _gameState <= 31 /*ST_PENALTIES*/)) {
                 s_kbd_skip = 1;
             }
+#endif
             break;
         default: break;
         }
@@ -1729,11 +1739,23 @@ void InputSDL_HandleEvent(const SDL_Event *e)
          * fire key is still held (see s_kbd_fire_keys). */
         case SDLK_RCTRL:  s_kbd_fire_keys &= ~KBD_FIRE_RCTRL;
                           s_kbd_fire = (s_kbd_fire_keys != 0); break;
-        case SDLK_LCTRL:  s_kbd_fire_keys &= ~KBD_FIRE_LCTRL;
-                          s_kbd_fire = (s_kbd_fire_keys != 0); break;
+        case SDLK_LCTRL:
+            s_kbd_fire_keys &= ~KBD_FIRE_LCTRL;
+            s_kbd_fire = (s_kbd_fire_keys != 0);
+#ifdef SWOS_MIYOO_BUILD
+            s_kbd_skip = 0;
+#endif
+            break;
         case SDLK_RETURN: s_kbd_fire_keys &= ~KBD_FIRE_RETURN;
                           s_kbd_fire = (s_kbd_fire_keys != 0); break;
-        case SDLK_SPACE:  s_kbd_skip = 0; break;
+        case SDLK_SPACE:
+#ifdef SWOS_MIYOO_BUILD
+            s_kbd_fire_keys &= ~KBD_FIRE_SPACE;
+            s_kbd_fire = (s_kbd_fire_keys != 0);
+#else
+            s_kbd_skip = 0;
+#endif
+            break;
         default: break;
         }
     } break;
@@ -2323,6 +2345,22 @@ int InputSDL_SelfTest(void)
     selftest_key(SDL_SCANCODE_RETURN, SDLK_RETURN, 0);
     selftest_key(SDL_SCANCODE_UP, SDLK_UP, 0);
     InputSDL_ClearKeyState();
+
+#ifdef SWOS_MIYOO_BUILD
+    selftest_key(SDL_SCANCODE_SPACE, SDLK_SPACE, 1);
+    EXPECT((InputSDL_LocalMatchControls() & 0x20) && _keyCount == 0,
+           "Miyoo A fires without queuing the Space hotkey");
+    EXPECT(!s_kbd_skip, "Miyoo A does not skip");
+    selftest_key(SDL_SCANCODE_LCTRL, SDLK_LCTRL, 1);
+    EXPECT(s_kbd_skip, "Miyoo B skips");
+    selftest_key(SDL_SCANCODE_SPACE, SDLK_SPACE, 0);
+    EXPECT(InputSDL_LocalMatchControls() & 0x20, "Miyoo B still fires after releasing A");
+    EXPECT(s_kbd_skip, "releasing Miyoo A does not clear B's skip");
+    selftest_key(SDL_SCANCODE_LCTRL, SDLK_LCTRL, 0);
+    EXPECT(!(InputSDL_LocalMatchControls() & 0x20), "Miyoo fire clears when both are released");
+    EXPECT(!s_kbd_skip, "releasing Miyoo B clears skip");
+    InputSDL_ClearKeyState();
+#endif
 
     /* In a text field a bound key is a letter. */
     _gTextInputActive = 1;

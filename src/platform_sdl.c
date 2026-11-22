@@ -2202,11 +2202,13 @@ static void touch_event(const SDL_Event *e)
 static int miyoo_map_key_event(SDL_Event *ev)
 {
     static int select_down, start_down;
+    SDL_GameControllerButton button;
     if (ev->type == SDL_WINDOWEVENT && ev->window.event == SDL_WINDOWEVENT_FOCUS_LOST)
         select_down = start_down = 0;
     if (ev->type != SDL_KEYDOWN && ev->type != SDL_KEYUP)
         return 0;
 
+    const int down = ev->type == SDL_KEYDOWN;
     switch (ev->key.keysym.sym) {
     case SDLK_ESCAPE:                 /* Menu belongs to OnionOS shortcuts. */
         return 1;
@@ -2215,17 +2217,40 @@ static int miyoo_map_key_event(SDL_Event *ev)
         ev->key.keysym.scancode = SDL_SCANCODE_ESCAPE;
         return 0;
     case SDLK_RCTRL:                  /* Select */
-        select_down = ev->type == SDL_KEYDOWN;
+        button = SDL_CONTROLLER_BUTTON_BACK;
         break;
     case SDLK_RETURN:                 /* Start */
-        start_down = ev->type == SDL_KEYDOWN;
+        button = SDL_CONTROLLER_BUTTON_START;
+        break;
+    case SDLK_LALT:                   /* Y */
+        button = SDL_CONTROLLER_BUTTON_Y;
+        break;
+    case SDLK_LSHIFT:                 /* X */
+        button = SDL_CONTROLLER_BUTTON_X;
         break;
     default:
         return 0;
     }
 
-    if (select_down && start_down && ev->type == SDL_KEYDOWN && !ev->key.repeat)
+    if (ev->key.repeat)
+        return 1;
+    if (button == SDL_CONTROLLER_BUTTON_BACK)
+        select_down = down;
+    if (button == SDL_CONTROLLER_BUTTON_START)
+        start_down = down;
+    if (down && select_down && start_down &&
+        (button == SDL_CONTROLLER_BUTTON_BACK || button == SDL_CONTROLLER_BUTTON_START)) {
         ev->type = SDL_QUIT;
+        return 0;
+    }
+    /* Use the same action and hold handling as PortMaster's controller path. */
+    ev->cbutton = (SDL_ControllerButtonEvent){
+        .type = down ? SDL_CONTROLLERBUTTONDOWN : SDL_CONTROLLERBUTTONUP,
+        .timestamp = ev->key.timestamp,
+        .which = -1,
+        .button = button,
+        .state = down ? SDL_PRESSED : SDL_RELEASED,
+    };
     return 0;
 }
 #endif
