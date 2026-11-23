@@ -11,6 +11,14 @@
 #include "input_text.h"
 #include "menu_system.h"
 #include "string_utils.h"
+#ifdef SWOS_MIYOO_BUILD
+#include "blitter.h"
+#include "display.h"
+#include "game_utils.h"
+#include "text_render.h"
+#include <SDL.h>
+#include <string.h>
+#endif
 #ifdef SWOS_WASM_BUILD
 #include <emscripten.h>
 #endif
@@ -201,6 +209,147 @@ static uint8_t typed_char(int32_t ch)
     return ch > ' ' && ch < 0x7F && extra_char((uint8_t)ch) ? (uint8_t)ch : 0;
 }
 
+#ifdef SWOS_MIYOO_BUILD
+enum { OSK_ROWS = 6, OSK_COLUMNS = 10, OSK_CELL_W = 29, OSK_CELL_H = 24 };
+
+static uint8_t s_osk_frame[PITCH_VIEW_MAX_WIDTH * SCREEN_HEIGHT];
+static char s_osk_keys[OSK_ROWS][OSK_COLUMNS];
+static int s_osk_count[OSK_ROWS], s_osk_row, s_osk_column, s_osk_open;
+extern volatile uintptr_t _frontbufferBasePtr;
+extern uint8_t _bigCharsTable[];
+extern uint8_t _smallCharsTable[];
+extern uint16_t _quitToDos;
+extern int16_t _menuControlsDirection;
+extern void InputSDL_ClearKeyState(void);
+extern void InputSDL_WebChar(int32_t ch);
+extern void WaitForVSync(void);
+
+static void osk_open(void)
+{
+    static const char *const rows[OSK_ROWS] = {
+        "ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ-.'?", "0123456789", "/+():,_", " "
+    };
+
+    for (int row = 0; row < OSK_ROWS; row++) {
+        s_osk_count[row] = 0;
+        for (const char *p = rows[row]; *p; p++)
+            if (typed_char(*p))
+                s_osk_keys[row][s_osk_count[row]++] = *p;
+    }
+    s_osk_row = s_osk_column = 0;
+    InputSDL_ClearKeyState();
+    s_osk_open = 1;
+}
+
+static void osk_close(void)
+{
+    if (s_osk_open) {
+        s_osk_open = 0;
+        InputSDL_ClearKeyState();
+    }
+}
+
+int InputText_MiyooKey(int32_t key, int pressed)
+{
+    int ch;
+    if (!s_osk_open)
+        return 0;
+
+    switch (key) {
+    case SDLK_SPACE: ch = s_osk_keys[s_osk_row][s_osk_column]; break; /* A */
+    case SDLK_LCTRL: ch = 8; break;     /* B */
+    case SDLK_RETURN: ch = 13; break;   /* Start */
+    case SDLK_TAB: ch = 27; break;      /* L2 */
+    case SDLK_RCTRL: return 1;          /* Select still participates in the quit chord. */
+    default: return 0;
+    }
+    if (pressed)
+        InputSDL_WebChar(ch);
+    return 1;
+}
+
+const uint8_t *InputText_MiyooFrame(void)
+{
+    return s_osk_open ? s_osk_frame : NULL;
+}
+
+static void osk_move(int direction)
+{
+    if (direction < 0)
+        return;
+    int columns = s_osk_count[s_osk_row];
+    switch (direction & 6) {
+    case 0: s_osk_row = (s_osk_row + OSK_ROWS - 1) % OSK_ROWS; break;
+    case 4: s_osk_row = (s_osk_row + 1) % OSK_ROWS; break;
+    case 6: s_osk_column = (s_osk_column + columns - 1) % columns; break;
+    case 2: s_osk_column = (s_osk_column + 1) % columns; break;
+    }
+    if (s_osk_column >= s_osk_count[s_osk_row])
+        s_osk_column = s_osk_count[s_osk_row] - 1;
+}
+
+static void osk_button(int x, int y, int w, int h, int color, int selected)
+{
+    FillRectangle(x, y, w, h, selected ? 2 : 1);
+    FillRectangle(x + 1, y + 1, w - 2, h - 2, color);
+    FillRectangle(x + 1, y + h - 1, w - 1, 1, 0);
+    FillRectangle(x + w - 1, y + 1, 1, h - 1, 0);
+}
+
+static void osk_draw(const uint8_t *pos)
+{
+    static const char *const hints[] = { "A TYPE", "B DELETE", "START OK", "L2 CANCEL" };
+    static const uint8_t hint_colors[] = { 9, 9, 14, 12 };
+    uintptr_t saved_fb = _frontbufferBasePtr;
+    int saved_offset = _menu_draw_x_offset;
+    uint8_t preview[100];
+    int len = 0;
+
+    /* Use the game's glyph blitter on a separate frame so the caller's menu stays intact. */
+    _frontbufferBasePtr = (uintptr_t)s_osk_frame;
+    _menu_draw_x_offset = (_screen_width - SCREEN_WIDTH) / 2;
+    memset(s_osk_frame, 45, (size_t)_screen_width * _screen_height);
+    osk_button(18, 14, 300, 26, 7, 0);
+    DrawMenuTextCentered(168, 23, 2, (uint8_t *)"ENTER TEXT", _bigCharsTable);
+    osk_button(18, 49, 300, 26, 0, 0);
+
+    for (const uint8_t *p = _inMenuKeyboardBuffer; p < pos; p++) {
+        uint8_t c = typed_char(*p);
+        preview[len++] = c ? c : '?';
+    }
+    preview[len] = 0;
+    uint8_t *visible = preview;
+    while (GetTextWidth(visible, _bigCharsTable) > 280)
+        visible++;
+    int end = DrawMenuText(25, 58, 2, visible, _bigCharsTable);
+    FillRectangle((uint16_t)end, 57, 2, 11, 2);
+
+    for (int row = 0; row < OSK_ROWS; row++) {
+        int cell_w = row == OSK_ROWS - 1 ? 116 : OSK_CELL_W;
+        int x = (SCREEN_WIDTH - s_osk_count[row] * cell_w) / 2;
+        int y = 84 + row * OSK_CELL_H;
+        for (int col = 0; col < s_osk_count[row]; col++, x += cell_w) {
+            uint8_t label[2] = { (uint8_t)s_osk_keys[row][col], 0 };
+            uint8_t *text = label[0] == ' ' ? (uint8_t *)"SPACE" : label;
+            int cx = x + (cell_w - 2) / 2;
+            int selected = row == s_osk_row && col == s_osk_column;
+            osk_button(x, y, cell_w - 2, OSK_CELL_H - 2, selected ? 10 : 9, selected);
+            if (label[0] == '_')
+                FillRectangle(cx - 3, y + 15, 7, 1, 2);
+            else
+                DrawMenuTextCentered(cx, y + 7, 2, text, _bigCharsTable);
+        }
+    }
+    for (int i = 0; i < 4; i++) {
+        int x = 18 + i * 75;
+        osk_button(x, 239, 73, 20, hint_colors[i], 0);
+        DrawMenuTextCentered(x + 36, 246, 2, (uint8_t *)hints[i], _smallCharsTable);
+    }
+    _menu_draw_x_offset = saved_offset;
+    _frontbufferBasePtr = saved_fb;
+}
+#endif
+
 #ifndef SWOS_SDL_BUILD
 /* The Amiga: SHIFT held types the symbol on the key (a US / UK keyboard's), as the Mod's DOS
  * game types its keyboard's (the Amiga's LUT gives only the unshifted character). */
@@ -357,10 +506,23 @@ static uint16_t inputTextBody(uint16_t maxLenPlus1, uint8_t *entryRaw)
     if (!s_rawMode)
         InputSDL_RawText(1);            /* (the characters as typed, the keyboard's layout and SHIFT) */
 #endif
+#ifdef SWOS_MIYOO_BUILD
+    if (!s_rawMode)
+        osk_open();
+#endif
 
     for (;;) {
+#ifdef SWOS_MIYOO_BUILD
+        if (_quitToDos)
+            goto cancel;
+#endif
         MenuCheckControls();
 
+#ifdef SWOS_MIYOO_BUILD
+        if (s_osk_open)
+            osk_move(_menuControlsDirection);
+        else
+#endif
         if (_shortFire != 0)
             goto commit;
 
@@ -369,13 +531,16 @@ static uint16_t inputTextBody(uint16_t maxLenPlus1, uint8_t *entryRaw)
             int ch;
             while ((ch = InputSDL_RawChar()) >= 0) {
                 const uint8_t c = typed_char(ch);
-                if (c && GetStringLength(_inMenuKeyboardBuffer) != maxLen) {
+                if (c && GetStringLength(_inMenuKeyboardBuffer) < maxLen) {
                     InsertCharacter(pos, c);
                     pos++;
                 }
             }
             /* LEFT / RIGHT move the cursor (SHIFT types now): the arrows reach the game as its
              * controls, not as keys */
+#ifdef SWOS_MIYOO_BUILD
+            if (!s_osk_open)
+#endif
             {
                 extern int16_t _menuControlsDirection;
                 if (_menuControlsDirection == 6 && pos > _inMenuKeyboardBuffer)
@@ -430,15 +595,8 @@ static uint16_t inputTextBody(uint16_t maxLenPlus1, uint8_t *entryRaw)
             continue;
         }
 
-        if (key == 27) { /* Escape — cancel */
-#ifdef SWOS_SDL_BUILD
-            InputSDL_RawText(0);
-#endif
-            entry->fg = (uintptr_t)origStr;
-            inputTextRedraw(entry);
-            _deadVar02 = 0;
-            return 1;
-        }
+        if (key == 27) /* Escape — cancel */
+            goto cancel;
 
         if (key == 127) { /* Backspace — delete char to the left */
             if (pos > _inMenuKeyboardBuffer) {
@@ -471,13 +629,36 @@ static uint16_t inputTextBody(uint16_t maxLenPlus1, uint8_t *entryRaw)
         }
 
     insert_cursor:
+#ifdef SWOS_MIYOO_BUILD
+        if (s_osk_open) {
+            osk_draw(pos);
+            WaitForVSync();
+            ReadTimerDelta();
+            continue;
+        }
+#endif
         /* Show cursor: insert 0xFF at pos, draw, then remove it */
         InsertCharacter(pos, 0xFF);
         inputTextRedraw(entry);
         InputTextDeleteCharAtCursor(pos);
     }
 
+cancel:
+#ifdef SWOS_MIYOO_BUILD
+    osk_close();
+#endif
+#ifdef SWOS_SDL_BUILD
+    InputSDL_RawText(0);
+#endif
+    entry->fg = (uintptr_t)origStr;
+    inputTextRedraw(entry);
+    _deadVar02 = 0;
+    return 1;
+
 commit:
+#ifdef SWOS_MIYOO_BUILD
+    osk_close();
+#endif
 #ifdef SWOS_SDL_BUILD
     InputSDL_RawText(0);
     if (s_rawMode) {

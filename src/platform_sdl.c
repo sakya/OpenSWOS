@@ -29,6 +29,9 @@
 #include "team_colors.h"     /* [video] purple_for_brown */
 #include "match_setup.h"     /* [video] improved_pitch_palette */
 #include "gpu_slang.h"       /* (a shader preset is a filter of its own) */
+#ifdef SWOS_MIYOO_BUILD
+#include "input_text.h"
+#endif
 
 #include <SDL.h>
 #include <stdio.h>
@@ -1834,6 +1837,10 @@ int Platform_MenuBackdropOn(void)
  * is anything). */
 static int backdrop_shown(void)
 {
+#ifdef SWOS_MIYOO_BUILD
+    if (InputText_MiyooFrame())
+        return 0;
+#endif
     extern int32_t ModApi_InMenus(void);
     extern int _gArcadeMode;
     return s_bd && !_gArcadeMode && ModApi_InMenus() && !s_cut_on;
@@ -1901,6 +1908,10 @@ void Platform_SetDisplayOptions(const PlatformInitOptions *o)
 /* The menus' opacity this frame, 0-255: 255 (solid) outside the menus. */
 static int menu_alpha_now(void)
 {
+#ifdef SWOS_MIYOO_BUILD
+    if (InputText_MiyooFrame())
+        return 255;
+#endif
     extern int32_t ModApi_InMenus(void);
     extern int _gArcadeMode;
     if (s_menu_alpha >= 255 || _gArcadeMode || !ModApi_InMenus() || s_cut_on)
@@ -1926,6 +1937,11 @@ static uint32_t blend_argb(SDL_Color c, uint32_t under, int a)
 
 static const uint8_t *frame_source(void)
 {
+#ifdef SWOS_MIYOO_BUILD
+    const uint8_t *keyboard = InputText_MiyooFrame();
+    if (keyboard)
+        return keyboard;
+#endif
     if (s_cut_on)
         return s_cut_buf;
     if (_usePlaneOffsetFlag != 0)
@@ -2219,7 +2235,21 @@ static int miyoo_map_key_event(SDL_Event *ev)
         return 0;
 
     const int down = ev->type == SDL_KEYDOWN;
-    switch (ev->key.keysym.sym) {
+    const SDL_Keycode key = ev->key.keysym.sym;
+    if (!ev->key.repeat) {
+        if (key == SDLK_RCTRL)
+            select_down = down;
+        if (key == SDLK_RETURN)
+            start_down = down;
+        if (down && select_down && start_down && (key == SDLK_RCTRL || key == SDLK_RETURN)) {
+            ev->type = SDL_QUIT;
+            return 0;
+        }
+    }
+    if (InputText_MiyooKey(key, down && !ev->key.repeat))
+        return 1;
+
+    switch (key) {
     case SDLK_ESCAPE:                 /* Menu belongs to OnionOS shortcuts. */
         return 1;
     case SDLK_TAB:                    /* L2: send Escape through the usual game path. */
@@ -2244,15 +2274,6 @@ static int miyoo_map_key_event(SDL_Event *ev)
 
     if (ev->key.repeat)
         return 1;
-    if (button == SDL_CONTROLLER_BUTTON_BACK)
-        select_down = down;
-    if (button == SDL_CONTROLLER_BUTTON_START)
-        start_down = down;
-    if (down && select_down && start_down &&
-        (button == SDL_CONTROLLER_BUTTON_BACK || button == SDL_CONTROLLER_BUTTON_START)) {
-        ev->type = SDL_QUIT;
-        return 0;
-    }
     /* Use the same action and hold handling as PortMaster's controller path. */
     ev->cbutton = (SDL_ControllerButtonEvent){
         .type = down ? SDL_CONTROLLERBUTTONDOWN : SDL_CONTROLLERBUTTONUP,
@@ -2806,6 +2827,10 @@ static void screenshot_frame_release(uint32_t *shot, uint32_t *fb)
 /* What goes over the picture, on either presenter (gfx.h). */
 static void draw_overlays(void)
 {
+#ifdef SWOS_MIYOO_BUILD
+    if (InputText_MiyooFrame())
+        return;
+#endif
     cutscene_hd_draw();             /* (an upscaled cutscene's frame: in place of the picture) */
     /* The built-in mods' drawing over the frame (src/mod_hooks.c: the weather), before the
      * CRT effects so the grille and the glass sit on top of it too. */

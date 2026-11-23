@@ -36,6 +36,11 @@ void PrintFormatted(const uint8_t *fmt, uint8_t *out,
  */
 uint16_t InputText(uint16_t maxLenPlus1, uint8_t *entry);
 
+#ifdef SWOS_MIYOO_BUILD
+int InputText_MiyooKey(int32_t key, int pressed);
+const uint8_t *InputText_MiyooFrame(void);
+#endif
+
 /* SDL: the next InputText calls take the characters themselves -- small letters, symbols --
  * for a password (src/input_sdl.c, SDL's text input); `shown` 0 draws each as '*'. The
  * string is the characters as typed; the entry should draw it masked after (the menu font
