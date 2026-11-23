@@ -175,6 +175,18 @@ void ShowMenu(uint8_t *packedMenu);
 void RestorePreviousMenu(MenuEntry *oldSelectedEntry, uint8_t *oldPackedMenu);
 void DrawMenu(void);
 void MenuCheckControls(void);
+
+/* The first repeat waits longer than the following repeats. */
+static inline int MenuRepeatDirection(uint16_t *held_ticks, uint16_t frame_ticks, int fire_held)
+{
+    const uint16_t threshold = fire_held ? 0x18 : 0x0C;
+    *held_ticks += frame_ticks;
+    if (*held_ticks < threshold)
+        return 0;
+    *held_ticks = fire_held ? 0x10 : 8;
+    return 1;
+}
+
 void DrawSelectedMenuItemFrame(void);
 void UpdateBlinkingMenuText(void);
 void DrawMenuPanelBackground(void);

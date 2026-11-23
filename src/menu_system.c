@@ -1916,17 +1916,10 @@ void MenuCheckControls(void)
 
     {
         int16_t curDir = _menuControlsDirection;
-        uint16_t threshold = (_fire != 0) ? 0x18 : 0x0C;
-        uint16_t resetVal = (_fire != 0) ? 0x10 : 8;
 
         if (curDir == _lastControls) {
-            _controlsHeldTimer += d2;
-            if (_controlsHeldTimer >= threshold) {
-                _controlsHeldTimer = resetVal;
-                _menuControlsDirection = curDir;
-            } else {
+            if (!MenuRepeatDirection(&_controlsHeldTimer, d2, _fire != 0))
                 _menuControlsDirection = -1;
-            }
         } else {
             _controlsHeldTimer = 0;
             _lastControls = curDir;

@@ -39,6 +39,11 @@
 #include "player_anim.h"
 #include "player_sprites.h"
 #include "display.h"    /* _screen_width — widescreen bench-camera fix (no-op on Amiga) */
+#ifdef SWOS_MIYOO_BUILD
+#include "game_loop.h"  /* _gFrameStepInput */
+#include "menu_system.h"
+extern uint16_t _lastFrameTicks;
+#endif
 
 #ifdef SWOS_DEBUG_AUTOSKIP
 #endif
@@ -801,6 +806,14 @@ menu_active_phase:
                 return;
             if (_subsPrevDirection != 0 && _subsPrevDirection != 4)
                 return;
+#ifdef SWOS_MIYOO_BUILD
+            /* Keep the original frame counts for replay and netplay simulation. */
+            if (!_gFrameStepInput) {
+                if (!MenuRepeatDirection(&_subsMovementDelayTimer, _lastFrameTicks, _subsFire != 0))
+                    return;
+                goto repeat_direction;
+            }
+#endif
             _subsMovementDelayTimer++;
             /* Amiga 2, DOS 4 — the held-direction repeat delay (dos_gameplay.c). */
             if ((int16_t)_subsMovementDelayTimer != _gsSubsMovementDelay)
@@ -808,8 +821,11 @@ menu_active_phase:
         }
 
     clear_block:
-        _subsBlockDirections = 0;
         _subsMovementDelayTimer = 0;
+#ifdef SWOS_MIYOO_BUILD
+    repeat_direction:
+#endif
+        _subsBlockDirections = 0;
         _subsPrevDirection = (uint16_t)d7;
 
         {
