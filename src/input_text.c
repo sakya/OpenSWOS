@@ -259,7 +259,9 @@ int InputText_MiyooKey(int32_t key, int pressed)
     case SDLK_SPACE: ch = s_osk_keys[s_osk_row][s_osk_column]; break; /* A */
     case SDLK_LCTRL: ch = 8; break;     /* B */
     case SDLK_RETURN: ch = 13; break;   /* Start */
-    case SDLK_TAB: ch = 27; break;      /* L2 */
+    /* Either rear trigger cancels, including when the firmware swaps L2 and R2. */
+    case SDLK_TAB:
+    case SDLK_BACKSPACE: ch = 27; break;
     case SDLK_RCTRL: return 1;          /* Select still participates in the quit chord. */
     default: return 0;
     }

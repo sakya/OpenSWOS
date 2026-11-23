@@ -47,4 +47,4 @@ The D-pad moves the player. **A** and **B** fire, and **B** also skips.
 **Start** pauses, **Select** shows statistics, **Y** requests an instant replay, and **X** requests the replay after a match. Use **L2** for Escape, **Select + Start** to quit OpenSWOS.
 
 Text fields open an on-screen keyboard. Use the D-pad to choose a character,
-**A** to type it, **B** to delete, **Start** to confirm, and **L2** to cancel.
+**A** to type it, **B** to delete, **Start** to confirm, and **L2** or **R2** to cancel.
