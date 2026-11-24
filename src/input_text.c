@@ -214,7 +214,7 @@ enum { OSK_ROWS = 6, OSK_COLUMNS = 10, OSK_CELL_W = 29, OSK_CELL_H = 24 };
 
 static uint8_t s_osk_frame[PITCH_VIEW_MAX_WIDTH * SCREEN_HEIGHT];
 static char s_osk_keys[OSK_ROWS][OSK_COLUMNS];
-static int s_osk_count[OSK_ROWS], s_osk_row, s_osk_column, s_osk_open;
+static int s_osk_count[OSK_ROWS], s_osk_row, s_osk_column, s_osk_preferred_column, s_osk_open;
 extern volatile uintptr_t _frontbufferBasePtr;
 extern uint8_t _bigCharsTable[];
 extern uint8_t _smallCharsTable[];
@@ -236,7 +236,7 @@ static void osk_open(void)
             if (typed_char(*p))
                 s_osk_keys[row][s_osk_count[row]++] = *p;
     }
-    s_osk_row = s_osk_column = 0;
+    s_osk_row = s_osk_column = s_osk_preferred_column = 0;
     InputSDL_ClearKeyState();
     s_osk_open = 1;
 }
@@ -283,11 +283,17 @@ static void osk_move(int direction)
     switch (direction & 6) {
     case 0: s_osk_row = (s_osk_row + OSK_ROWS - 1) % OSK_ROWS; break;
     case 4: s_osk_row = (s_osk_row + 1) % OSK_ROWS; break;
-    case 6: s_osk_column = (s_osk_column + columns - 1) % columns; break;
-    case 2: s_osk_column = (s_osk_column + 1) % columns; break;
+    case 6:
+        if (columns > 1)
+            s_osk_preferred_column = (s_osk_column + columns - 1) % columns;
+        break;
+    case 2:
+        if (columns > 1)
+            s_osk_preferred_column = (s_osk_column + 1) % columns;
+        break;
     }
-    if (s_osk_column >= s_osk_count[s_osk_row])
-        s_osk_column = s_osk_count[s_osk_row] - 1;
+    columns = s_osk_count[s_osk_row];
+    s_osk_column = s_osk_preferred_column < columns ? s_osk_preferred_column : columns - 1;
 }
 
 static void osk_button(int x, int y, int w, int h, int color, int selected)
