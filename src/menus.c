@@ -3079,10 +3079,19 @@ void CommonMenuExit(void)
     }
 #endif
 #ifndef SWOS_NETPLAY
-    /* OpenSWOS's MULTIPLAYER button (entry 14) plays over the network, so it is only
-     * in a build that has the netplay library (make NETPLAY=1, docs/NETPLAY.md): never
-     * on the Amiga, and never on the web, where a browser has no UDP to play over. */
+    /* MULTIPLAYER requires the netplay library (make NETPLAY=1, docs/NETPLAY.md). */
     _menuEntries[14].isInvisible = 1;
+#elif defined(SWOS_MIYOO_BUILD)
+    if (_menuEntries[14].onSelect == (MenuEntryFn)(void (*)(void))MultiplayerMenuSelected) {
+        /* OnionOS writes 283 for the Mini and 354 for the Mini Plus at boot. */
+        FILE *model = fopen("/tmp/deviceModel", "r");
+        if (model) {
+            char id[8];
+            if (fgets(id, sizeof id, model) && (strcmp(id, "283") == 0 || strcmp(id, "283\n") == 0))
+                _menuEntries[14].isInvisible = 1;
+            fclose(model);
+        }
+    }
 #endif
     if (_gameType == GAME_TYPE_DIY_COMPETITION) {
         nameStr = (uint8_t *)_primaryCompetitionBuf.tourn.header.competitionName;

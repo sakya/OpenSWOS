@@ -10,6 +10,7 @@ Run `make shell` from the toolchain directory to enter the container. Inside the
 ```sh
 apt-get update
 apt-get install -y autoconf automake libtool pkg-config cmake git zip
+git submodule update --init third_party/ggpo-x
 sh miyoo/build-sdl2.sh
 sh miyoo/miyoo_build.sh
 ```
